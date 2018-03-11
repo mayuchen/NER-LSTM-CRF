@@ -1,7 +1,7 @@
 data_params:
   path_result: ./data/test.ner.txt.result
   path_test: ./data/test.ner.txt
-  path_train: ./data/train.ner.txt
+  path_train: ./data/ner_lstm_crf.train
   sep: table
   voc_params:
     char: {min_count: 0, path: ./Res/voc/char.voc.pkl}
@@ -25,13 +25,13 @@ model_params:
       dropout_rate: 0.3
       path: ./Res/embed/char_embed.pkl
       path_pre_train: ./data/embedding.txt
-      shape: [8818, 64]
+      shape: [2692, 64]
     f2:
       dropout_rate: 0.3
       path: null
       path_pre_train: null
-      shape: [6, 32]
-  feature_names: [f1]
+      shape: [52, 32]
+  feature_names: [f1,f2]
   l2_rate: 0.001
   learning_rate: 0.002
   max_patience: 5
@@ -39,7 +39,7 @@ model_params:
   nb_epoch: 200
   path_model: ./Model/best_model
   rnn_unit: lstm
-  sequence_len_pt: 98
+  sequence_len_pt: 100
   sequence_length: 55
   use_char_feature: false
   conv_filter_size_list: [8, 8, 8, 8, 8]
