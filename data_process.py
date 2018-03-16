@@ -47,7 +47,7 @@ def evaluate_slot(file_path):
 def data_clean(file_path):
     with open(file_path) as fp:
         lines = fp.readlines()
-    lines = [line.replace('\r\n','') for line in lines]
+    lines = [line.replace('\r\n','').replace('\t\t\t', '') for line in lines]
     with open('data/315c.train','w') as fp:
         fp.writelines(lines)
 
