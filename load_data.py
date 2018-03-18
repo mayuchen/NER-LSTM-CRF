@@ -9,7 +9,19 @@ import codecs
 import pickle
 import numpy as np
 from utils import map_item2id
-
+INTENT_DIC={
+    'music.play' : 1,
+    'music.pause': 2,
+    'music.prev': 3,
+    'music.next': 4,
+    'navigation.navigation': 5,
+    'navigation.open':6,
+    'navigation.start_navigation':7,
+    'navigation.cancel_navigation':8,
+    'phone_call.make_a_phone_call':9,
+    'phone_call.cancel':10,
+    'OTHERS':0
+}
 
 def load_vocs(paths):
     """
@@ -41,7 +53,7 @@ def load_lookup_tables(paths):
     return lookup_tables
 
 
-def init_data(path, feature_names, vocs, max_len, model='train',
+def init_data(path, feature_names, vocs, max_len, model='train', intent_path=None,
               use_char_feature=False, word_len=None, sep='\t'):
     """
     加载数据(待优化，目前是一次性加载整个数据集)
@@ -59,7 +71,11 @@ def init_data(path, feature_names, vocs, max_len, model='train',
     """
     assert model in ('train', 'test')
     file_r = codecs.open(path, 'r', encoding='utf-8')
+    if intent_path:
+        intent_file_r = codecs.open(intent_path, 'r', encoding='utf-8')
+        intents = intent_file_r.read().strip().split('\n')
     sentences = file_r.read().strip().split('\n\n')
+
     sentence_count = len(sentences)
     feature_count = len(feature_names)
     data_dict = dict()
@@ -72,6 +88,7 @@ def init_data(path, feature_names, vocs, max_len, model='train',
         char_voc = vocs.pop(0)
     if model == 'train':
         data_dict['label'] = np.zeros((len(sentences), max_len), dtype='int32')
+        data_dict['intent_label'] = np.zeros((len(sentences)), dtype='int32')
     for index, sentence in enumerate(sentences):
         items = sentence.split('\n')
         one_instance_items = []
@@ -92,6 +109,8 @@ def init_data(path, feature_names, vocs, max_len, model='train',
                 data_dict['char'][index][i, :] = map_item2id(
                     word, char_voc, word_len)
         if model == 'train':
+            if intents:
+                data_dict['intent_label'][index] = INTENT_DIC.get(intents[index], 0)
             data_dict['label'][index, :] = map_item2id(
                 one_instance_items[-1], vocs[-1], max_len)
         sys.stdout.write('loading data: %d\r' % index)

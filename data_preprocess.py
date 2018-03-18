@@ -90,7 +90,7 @@ def LSTM_preprocess(sentence_o, sentence_t, fp):
     #         tag = sentence_t[j]
     #         while sentence_t[j]!=
 
-def LSTM_preprocess_session(session, fp):
+def LSTM_preprocess_session(session, fp, intent_fp):
     sentence_os = []
     sentence_ts = []
     for line in session.split('\n'):
@@ -99,6 +99,7 @@ def LSTM_preprocess_session(session, fp):
             continue
         sentence_os.append(segs[1])
         sentence_ts.append(segs[3])
+    intent_fp.write(segs[2]+'\n')
     LSTM_preprocess(' '.join(sentence_os), ' '.join(sentence_ts), fp)
 
 
@@ -109,32 +110,36 @@ if __name__ == '__main__':
     #     tag = slot_dic.get(word, 'udf')
     #     jieba.add_word(word, tag=tag)
     # load_slot_data()
-    dataset_name = '316'
+    load_data()
+    dataset_name = '318'
     fp = open('data/%s.test' % dataset_name, 'w')
-    with open('data/corpus_slot.test') as fr:
-        sessions = fr.read().split('\n\n')
-        [LSTM_preprocess_session(session, fp) for session in sessions]
-    fp = open('data/%s.train' % dataset_name, 'w')
-    with open('data/corpus_slot.train') as fr:
-        sessions = fr.read().split('\n\n')
-        [LSTM_preprocess_session(session, fp) for session in sessions]
-
+    fpt = open('data/%s.intent.test' % dataset_name, 'w')
+    with open('data/corpus1.test') as fr:
+        lines = fr.readlines()
+        for line in lines:
+            segs = line.split('\t')
+            try:
+                LSTM_preprocess(segs[1],segs[3], fp)
+                fpt.write(segs[2] + '\n')
+            except Exception as e:
+                print(e)
+                print(segs[3])
+    fp = open('data/%s.train','w')
+    fpt = open('data/%s.intent.train' % dataset_name, 'w')
+    with open('data/corpus1.train') as fr:
+        lines = fr.readlines()
+        for line in lines:
+            segs = line.split('\t')
+            try:
+                LSTM_preprocess(segs[1],segs[3],fp)
+                fpt.write(segs[2]+'\n')
+            except Exception as e:
+                print(e)
+                print(segs[3])
     # with open('data/corpus_slot.test') as fr:
-    #     lines = fr.readlines()
-    #     for line in lines:
-    #         segs = line.split('\t')
-    #         try:
-    #             LSTM_preprocess(segs[1],segs[3],fp)
-    #         except Exception as e:
-    #             print(e)
-    #             print(segs[3])
-    # fp = open('data/%s.train','w')
-    # with open('data/corpus.train') as fr:
-    #     lines = fr.readlines()
-    #     for line in lines:
-    #         segs = line.split('\t')
-    #         try:
-    #             LSTM_preprocess(segs[1],segs[3],fp)
-    #         except Exception as e:
-    #             print(e)
-    #             print(segs[3])
+    #     sessions = fr.read().split('\n\n')
+    #     [LSTM_preprocess_session(session, fp) for session in sessions]
+    # fp = open('data/%s.train' % dataset_name, 'w')
+    # with open('data/corpus_slot.train') as fr:
+    #     sessions = fr.read().split('\n\n')
+    #     [LSTM_preprocess_session(session, fp) for session in sessions]
