@@ -124,7 +124,7 @@ if __name__ == '__main__':
             except Exception as e:
                 print(e)
                 print(segs[3])
-    fp = open('data/%s.train','w')
+    fp = open('data/%s.train' % dataset_name,'w')
     fpt = open('data/%s.intent.train' % dataset_name, 'w')
     with open('data/corpus1.train') as fr:
         lines = fr.readlines()

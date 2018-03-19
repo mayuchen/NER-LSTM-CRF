@@ -179,10 +179,35 @@ class SequenceLabelingModel(object):
         # label ph
         self.input_label_ph = tf.placeholder(
             dtype=tf.int32, shape=[None, self._sequence_length], name='input_label_ph')
+        self.input_label_intention = tf.placeholder(dtype=tf.int32, shape=[None], name='input_label_intention')
         if self._use_char_feature:
             self.cnn_dropout_rate_ph = tf.placeholder(tf.float32, name='cnn_dropout_rate_ph')
 
         self.build_model()
+    @staticmethod
+    def merge_bi_rnn_state(bi_state):
+        encoder_fw_state = bi_state[0]
+        encoder_bw_state = bi_state[1]
+        if isinstance(bi_state, rnn.LSTMStateTuple):  # LstmCell
+            state_c = tf.concat(
+                (encoder_fw_state.c, encoder_bw_state.c), 1, name="bidirectional_concat_c")
+            state_h = tf.concat(
+                (encoder_fw_state.h, encoder_bw_state.h), 1, name="bidirectional_concat_h")
+            final_state = rnn.LSTMStateTuple(c=state_c, h=state_h)
+        elif isinstance(encoder_fw_state, tuple) \
+                and isinstance(encoder_fw_state[0], rnn.LSTMStateTuple):  # MultiLstmCell
+            final_state = tuple(map(
+                lambda fw_state, bw_state: rnn.LSTMStateTuple(
+                    c=tf.concat((fw_state.c, bw_state.c), 1,
+                                name="bidirectional_concat_c"),
+                    h=tf.concat((fw_state.h, bw_state.h), 1,
+                                name="bidirectional_concat_h")),
+                encoder_fw_state, encoder_bw_state))
+        else:
+            final_state = tf.concat(
+                (encoder_fw_state, encoder_bw_state), 1,
+                name="bidirectional_state_concat")
+        return final_state
 
     def build_model(self):
         for feature_name in self._feature_names:
@@ -267,7 +292,7 @@ class SequenceLabelingModel(object):
         # 计算self.input_features[feature_names[0]]的实际长度(0为padding值)
         self.sequence_actual_length = get_sequence_actual_length(  # 每个句子的实际长度
             self.input_feature_ph_dict[self._feature_names[0]])
-        rnn_outputs, _ = tf.nn.bidirectional_dynamic_rnn(
+        rnn_outputs, rnn_state = tf.nn.bidirectional_dynamic_rnn(
             fw_cell, bw_cell, input_features, scope='bi-lstm',
             dtype=tf.float32, sequence_length=self.sequence_actual_length)
         # shape = [batch_size, max_len, nb_hidden*2]
@@ -284,11 +309,18 @@ class SequenceLabelingModel(object):
             tf.matmul(self.outputs, self.softmax_w) + self.softmax_b,
             shape=[-1, self._sequence_length, self._nb_classes], name='logits')
 
-        # 计算loss
+        # 计算意图识别的loss
+        rnn_std_state = self.merge_bi_rnn_state(rnn_state)[-1].h
+        intention_logits = tf.layers.dense(rnn_std_state, 11)
+        print(rnn_std_state.shape, intention_logits.shape)
+        intention_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.input_label_intention,
+                                                                        logits=intention_logits)
+        # 计算labeling loss
         self.loss = self.compute_loss()
+        self.intention_loss = tf.reduce_mean(intention_loss)
         self.l2_loss = self._l2_rate * (tf.nn.l2_loss(self.softmax_w) + tf.nn.l2_loss(self.softmax_b))
 
-        self.total_loss = self.loss + self.l2_loss
+        self.total_loss = self.loss + self.l2_loss + self.intention_loss
 
         # train op
         optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate)
@@ -385,15 +417,20 @@ class SequenceLabelingModel(object):
                 # label feed
                 batch_label = data_train_dict['label'][batch_indices]
                 feed_dict.update({self.input_label_ph: batch_label})
+                batch_intention_label = data_train_dict['intent_label'][batch_indices]
+                feed_dict.update({self.input_label_intention: batch_intention_label})
 
                 _, loss, ls_loss = self.sess.run([self.train_op, self.loss, self.l2_loss], feed_dict=feed_dict)
                 train_loss += loss
             train_loss /= float(nb_train)
 
             # 计算在开发集上的loss
-            dev_loss = self.evaluate(data_dev_dict)
+            dev_loss, dev_intent_loss = self.evaluate(data_dev_dict)
 
-            print('train loss: %f, dev loss: %f, l2 loss: %f' % (train_loss, dev_loss, l2_loss))
+            print('train loss: %f, dev loss: %f, l2 loss: %f, dev intention loss: %f' % (train_loss,
+                                                                                         dev_loss,
+                                                                                         l2_loss,
+                                                                                         dev_intent_loss))
 
             # 根据dev上的表现保存模型
             if not self._path_model:
@@ -441,7 +478,7 @@ class SequenceLabelingModel(object):
         """
         data_count = data_dict['label'].shape[0]
         nb_eval = int(math.ceil(data_count / float(self._batch_size)))
-        eval_loss = 0.
+        eval_loss, eval_intent_loss = 0., 0.
         for i in range(nb_eval):
             feed_dict = dict()
             batch_indices = np.arange(i * self._batch_size, (i + 1) * self._batch_size) \
@@ -464,11 +501,15 @@ class SequenceLabelingModel(object):
             # label feed
             batch_label = data_dict['label'][batch_indices]
             feed_dict.update({self.input_label_ph: batch_label})
+            batch_intention_label = data_dict['intent_label'][batch_indices]
+            feed_dict.update({self.input_label_intention: batch_intention_label})
 
-            loss = self.sess.run(self.loss, feed_dict=feed_dict)
+            loss, intent_loss = self.sess.run([self.loss, self.intention_loss], feed_dict=feed_dict)
             eval_loss += loss
+            eval_intent_loss += intent_loss
         eval_loss /= float(nb_eval)
-        return eval_loss
+        eval_intent_loss /= float(nb_eval)
+        return eval_loss, eval_intent_loss
 
     def predict(self, data_test_dict):
         """
