@@ -6,6 +6,7 @@ import re
 import jieba
 
 
+
 SLOT_NAME = {'song': 'music.play', 'singer': 'music.play', 'theme': 'music.play', 'style': 'music.play', 'age': 'music.play',
              'toplist': 'music.play', 'emotion': 'music.play', 'language': 'music.play', 'instrument': 'music.play',
              'scene': 'music.play', 'destination': 'navigation.navigation', 'custom_destination': 'navigation.navigation',
@@ -18,6 +19,8 @@ def load_dic(dirpath):
         tag = filename.split('.')[0].replace(' ', '_')
         with open(filepath) as fp:
             for line in fp.readlines():
+                if len(line.rstrip('\n')) < 2:
+                    continue
                 slot_dic[line.rstrip('\n')] = tag
     return slot_dic
 
@@ -45,12 +48,19 @@ def load_slot_data():
     with open('data/corpus_slot.test', 'w') as fp:
         fp.write('\n\n'.join(test))
         fp.close()
-# def result_process
 
-def LSTM_preprocess(sentence_o, sentence_t, fp):
+
+def LSTM_preprocess(sentence_o, intention, sentence_t, fp):
     segs = pseg.cut(sentence_o)
     ENR = []
     s_label = []
+    dict_label = ['o' for i in range(len(sentence_o))]
+    items = ac.iter(sentence_o)
+    for item in items:
+        word = item[1][1]
+        tag = slot_dic.get(word, 'o')
+        for i in range(item[0]+1-len(word),item[0]+1):
+            dict_label[i] = tag
     for word,f in segs:
         for ch in word:
             ENR.append(f)
@@ -73,8 +83,9 @@ def LSTM_preprocess(sentence_o, sentence_t, fp):
             else:
                 pos = 'B' if i == 0 else ('E' if i == len(content)-1 else 'I')
                 s_label.append(pos + '-' + label)
+    fp.write('%s\t%s\t%s\t%s\n' % ('Z', 'Z', 'Z',intention))
     for i in range(0,len(sentence_o)):
-        fp.write('%s\t%s\t%s\n' % (sentence_o[i],ENR[i],s_label[i]))
+        fp.write('%s\t%s\t%s\t%s\n' % (sentence_o[i],ENR[i],dict_label[i],s_label[i]))
     fp.write('\n')
 
 
@@ -103,39 +114,40 @@ def LSTM_preprocess_session(session, fp, intent_fp):
     LSTM_preprocess(' '.join(sentence_os), ' '.join(sentence_ts), fp)
 
 
+def LSTM_file_process(dataset_name, fr, train=True):
+    file_rename = 'train' if train else 'test'
+    fp = open('data/%s.%s' % (dataset_name, file_rename), 'w')
+    # fpt = open('data/%s.intent.%s' % (dataset_name, file_rename), 'w')
+    lines = fr.readlines()
+    for line in lines:
+        segs = line.split('\t')
+        try:
+            LSTM_preprocess(segs[1], segs[2], segs[3], fp)
+            # fpt.write(segs[2] + '\n')
+        except Exception as e:
+            print(e)
+            print(segs[3])
+
+def bulid_ahocorasick():
+    import ahocorasick
+    a = ahocorasick.Automaton()
+    slot_dic = load_dic('slot-dictionaries')
+    counter = 1
+    for key in slot_dic.keys():
+        a.add_word(key, (counter, key))
+        counter += 1
+    a.make_automaton()
+    return a,slot_dic
 
 if __name__ == '__main__':
-    # slot_dic = load_dic('slot-dictionaries')
-    # for word in slot_dic.keys():
-    #     tag = slot_dic.get(word, 'udf')
-    #     jieba.add_word(word, tag=tag)
+    ac, slot_dic = bulid_ahocorasick()
     # load_slot_data()
     load_data()
-    dataset_name = '318'
-    fp = open('data/%s.test' % dataset_name, 'w')
-    fpt = open('data/%s.intent.test' % dataset_name, 'w')
     with open('data/corpus1.test') as fr:
-        lines = fr.readlines()
-        for line in lines:
-            segs = line.split('\t')
-            try:
-                LSTM_preprocess(segs[1],segs[3], fp)
-                fpt.write(segs[2] + '\n')
-            except Exception as e:
-                print(e)
-                print(segs[3])
-    fp = open('data/%s.train' % dataset_name,'w')
-    fpt = open('data/%s.intent.train' % dataset_name, 'w')
+        LSTM_file_process('318',fr)
+    #
     with open('data/corpus1.train') as fr:
-        lines = fr.readlines()
-        for line in lines:
-            segs = line.split('\t')
-            try:
-                LSTM_preprocess(segs[1],segs[3],fp)
-                fpt.write(segs[2]+'\n')
-            except Exception as e:
-                print(e)
-                print(segs[3])
+        LSTM_file_process('318',fr)
     # with open('data/corpus_slot.test') as fr:
     #     sessions = fr.read().split('\n\n')
     #     [LSTM_preprocess_session(session, fp) for session in sessions]

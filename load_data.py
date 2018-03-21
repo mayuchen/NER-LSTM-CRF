@@ -88,7 +88,7 @@ def init_data(path, feature_names, vocs, max_len, model='train', intent_path=Non
         char_voc = vocs.pop(0)
     if model == 'train':
         data_dict['label'] = np.zeros((len(sentences), max_len), dtype='int32')
-        data_dict['intent_label'] = np.zeros((len(sentences)), dtype='int32')
+        # data_dict['intent_label'] = np.zeros((len(sentences)), dtype='int32')
     for index, sentence in enumerate(sentences):
         items = sentence.split('\n')
         one_instance_items = []
@@ -109,8 +109,6 @@ def init_data(path, feature_names, vocs, max_len, model='train', intent_path=Non
                 data_dict['char'][index][i, :] = map_item2id(
                     word, char_voc, word_len)
         if model == 'train':
-            if intents:
-                data_dict['intent_label'][index] = INTENT_DIC.get(intents[index], 0)
             data_dict['label'][index, :] = map_item2id(
                 one_instance_items[-1], vocs[-1], max_len)
         sys.stdout.write('loading data: %d\r' % index)

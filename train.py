@@ -60,7 +60,7 @@ def main():
     data_dict = init_data(
         path=config['data_params']['path_train'], feature_names=feature_names, sep=sep,
         vocs=vocs, max_len=max_len, model='train', use_char_feature=use_char_feature,
-        word_len=word_len, intent_path=config['data_params']['path_intention_train'])
+        word_len=word_len)
 
     # 训练模型
     model = SequenceLabelingModel(
