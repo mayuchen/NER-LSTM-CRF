@@ -33,6 +33,7 @@ def evaluate_slot(file_path):
             correct += 1 if flag else 0
             intent_correct += 1 if intent_flag else 0
             if not flag:
+                print(idx)
                 print(sentence_origin)
                 print(sentence_predict)
             flag = True
