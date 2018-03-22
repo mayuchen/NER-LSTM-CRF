@@ -267,6 +267,7 @@ class SequenceLabelingModel(object):
         # 计算self.input_features[feature_names[0]]的实际长度(0为padding值)
         self.sequence_actual_length = get_sequence_actual_length(  # 每个句子的实际长度
             self.input_feature_ph_dict[self._feature_names[0]])
+        # todo: add encoder output
         rnn_outputs, _ = tf.nn.bidirectional_dynamic_rnn(
             fw_cell, bw_cell, input_features, scope='bi-lstm',
             dtype=tf.float32, sequence_length=self.sequence_actual_length)
