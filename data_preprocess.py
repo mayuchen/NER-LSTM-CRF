@@ -25,7 +25,7 @@ def load_dic(dirpath):
     return slot_dic
 
 def load_data():
-    with open('data/corpus.train.txt') as fp:
+    with open('data/corpus.train.prev.txt') as fp:
         lines = fp.readlines()
         lines = [line for line in lines if len(line) > 5]
         fp.close()
@@ -50,7 +50,7 @@ def load_slot_data():
         fp.close()
 
 
-def LSTM_preprocess(sentence_o, intention, sentence_t, fp):
+def LSTM_preprocess(sentence_o, intention, sentence_t, prev_domain, fp):
     segs = pseg.cut(sentence_o)
     ENR = []
     s_label = []
@@ -83,9 +83,9 @@ def LSTM_preprocess(sentence_o, intention, sentence_t, fp):
             else:
                 pos = 'B' if i == 0 else ('E' if i == len(content)-1 else 'I')
                 s_label.append(pos + '-' + label)
-    fp.write('%s\t%s\t%s\t%s\n' % ('Z', 'Z', 'Z',intention))
+    fp.write('%s\t%s\t%s\t%s\n' % ('Z', prev_domain, 'Z', intention))
     for i in range(0,len(sentence_o)):
-        fp.write('%s\t%s\t%s\t%s\n' % (sentence_o[i],ENR[i],dict_label[i],s_label[i]))
+        fp.write('%s\t%s\t%s\t%s\n' % (sentence_o[i], ENR[i], dict_label[i], s_label[i]))
     fp.write('\n')
 
 
@@ -120,13 +120,27 @@ def LSTM_file_process(dataset_name, fr, train=True):
     # fpt = open('data/%s.intent.%s' % (dataset_name, file_rename), 'w')
     lines = fr.readlines()
     for line in lines:
-        segs = line.split('\t')
+        segs = line.rstrip('\n').split('\t')
         try:
-            LSTM_preprocess(segs[1], segs[2], segs[3], fp)
+            LSTM_preprocess(segs[1], segs[2], segs[3], segs[4], fp)
             # fpt.write(segs[2] + '\n')
         except Exception as e:
             print(e)
             print(segs[3])
+
+def add_prev_domain():
+    with open('data/corpus.train.txt') as fp:
+        lines = [line.rstrip('\n') for line in fp.readlines()]
+        fp.close()
+    prev_domain = 'OTHERS'
+    with open('data/corpus.train.prev.txt', 'w') as fp:
+        for line in lines:
+            if line == '':
+                prev_domain = 'OTHERS'
+                continue
+            fp.write(line + '\t%s\n' % prev_domain)
+            prev_domain = line.split('\t')[2].split('.')[0]
+
 
 def bulid_ahocorasick():
     import ahocorasick
@@ -142,12 +156,14 @@ def bulid_ahocorasick():
 if __name__ == '__main__':
     ac, slot_dic = bulid_ahocorasick()
     # load_slot_data()
+    # add_prev_domain()
     load_data()
     with open('data/corpus1.test') as fr:
-        LSTM_file_process('318',fr)
+        LSTM_file_process('322', fr, train=False)
     #
     with open('data/corpus1.train') as fr:
-        LSTM_file_process('318',fr)
+        LSTM_file_process('322', fr, train=True)
+
     # with open('data/corpus_slot.test') as fr:
     #     sessions = fr.read().split('\n\n')
     #     [LSTM_preprocess_session(session, fp) for session in sessions]

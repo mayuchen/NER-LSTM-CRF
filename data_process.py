@@ -1,19 +1,16 @@
 
-
-def merge_feature(feature_file1, feature_file2, fw):
-    fp1 = open(feature_file1)
-    fp2 = open(feature_file2)
-    lines1 = fp1.readlines()
-    lines2 = fp2.readlines()
-
 def sentence_serial(sentence, ch, tag_last, label):
     if tag_last == 'O' == label:
         sentence += ch
         return sentence, label
-    if label == 'O':
+    if '-' not in label:
         sentence += '</%s>%s' % (tag_last, ch)
         return sentence, label
-    [p_tag, tag] = label.split('-')
+    try:
+        [p_tag, tag] = label.split('-')
+    except:
+        import pdb
+        pdb.set_trace()
     if tag_last == 'O':
         sentence += '<%s>%s' % (tag, ch)
         return sentence, tag
@@ -41,7 +38,7 @@ def evaluate_slot(file_path):
             intent_o = segs[-2]
             intent_p = segs[-1]
             intent_flag = (intent_p == intent_o)
-            flag = intent_flag
+            # flag = intent_flag
             sentence_origin += 'intent: %s ' % intent_o
             sentence_predict += 'intent: %s ' % intent_p
             continue
@@ -50,6 +47,8 @@ def evaluate_slot(file_path):
             sentence_origin, tag_o = sentence_serial(sentence_origin, '', tag_o, 'O')
             sentence_predict, tag_p = sentence_serial(sentence_predict, '',tag_p, 'O')
             count += 1
+            # flag = flag or ('取消' in sentence_origin) or ('关闭' in sentence_origin)
+            # intent_flag = intent_flag or ('取消' in sentence_origin) or ('关闭' in sentence_origin)
             correct += 1 if flag else 0
             intent_correct += 1 if intent_flag else 0
             if not flag:
@@ -65,18 +64,6 @@ def evaluate_slot(file_path):
             flag = False
         sentence_origin, tag_o = sentence_serial(sentence_origin, segs[0], tag_o, segs[-2])
         sentence_predict, tag_p = sentence_serial(sentence_predict, segs[0], tag_p, segs[-1])
-
-
-        # if segs[-2].startswith('B'):
-        #     sentence_origin += ('<%s>' % segs[-2].split('-')[1])
-        # if segs[-1].startswith('B'):
-        #     sentence_predict += ('<%s>' % segs[-1].split('-')[1])
-        # sentence_origin += segs[0]
-        # sentence_predict += segs[0]
-        # if segs[-2].startswith('E'):
-        #     sentence_origin += ('</%s>' % segs[-2].split('-')[1])
-        # if segs[-1].startswith('E'):
-        #     sentence_predict += ('</%s>' % segs[-1].split('-')[1])
     print(count)
     print(correct)
     print(intent_correct)
@@ -91,6 +78,6 @@ def data_clean(file_path):
         fp.writelines(lines)
 
 if __name__ == '__main__':
-    evaluate_slot('data/318.result')
+    evaluate_slot('data/322.result')
     # evaluate_slot('data/crf/nohup.out')
     # data_clean('data/315.train')
