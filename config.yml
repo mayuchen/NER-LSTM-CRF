@@ -1,7 +1,7 @@
 data_params:
-  path_result: ./data/318.result
-  path_test: ./data/318.test
-  path_train: ./data/318.train
+  path_result: ./data/322.result
+  path_test: ./data/322.test
+  path_train: ./data/322.train
   sep: table
   voc_params:
     char: {min_count: 0, path: ./Res/voc/char.voc.pkl}
@@ -29,12 +29,12 @@ model_params:
       dropout_rate: 0.3
       path: null
       path_pre_train: null
-      shape: [2689, 64]
+      shape: [2697, 64]
     f2:
       dropout_rate: 0.4
       path: null
       path_pre_train: null
-      shape: [53, 32]
+      shape: [56, 32]
     f3:
       dropout_rate: 0.3
       path: null
@@ -47,9 +47,9 @@ model_params:
   nb_classes: 57
   nb_epoch: 200
   path_model: ./Model/best_model_intent
-  rnn_unit: gru
+  rnn_unit: lstm
   sequence_len_pt: 99
-  sequence_length: 21
+  sequence_length: 20
   use_char_feature: false
   use_crf: true
   word_len_pt: 95

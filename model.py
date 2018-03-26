@@ -412,7 +412,7 @@ class SequenceLabelingModel(object):
             shuffle_matrix(*data_list, seed=seed)
 
             # train
-            train_loss, l2_loss = 0., 0.
+            train_loss, l2_loss, all_intent_loss = 0., 0., 0.
             for i in tqdm(range(nb_train)):
                 feed_dict = dict()
                 batch_indices = np.arange(i * self._batch_size, (i + 1) * self._batch_size) \
@@ -451,7 +451,9 @@ class SequenceLabelingModel(object):
                 _, loss, intent_loss, intent_pred, intent_logits = self.sess.run([self.train_op, self.total_loss,
                                                                             self.intent_loss, self.intent, self.intent_logits, ], feed_dict=feed_dict)
                 train_loss += loss
+                all_intent_loss += intent_loss
             train_loss /= float(nb_train)
+            intent_loss = all_intent_loss/float(nb_train)
 
             # 计算在开发集上的loss
             dev_loss = self.evaluate(data_dev_dict)
@@ -547,6 +549,7 @@ class SequenceLabelingModel(object):
         data_count = data_test_dict[self._feature_names[0]].shape[0]
         nb_test = int(math.ceil(data_count / float(self._batch_size)))
         viterbi_sequences = []  # 标记结果
+        intent_result = []
         for i in tqdm(range(nb_test)):
             feed_dict = dict()
             batch_indices = np.arange(i * self._batch_size, (i + 1) * self._batch_size) \
@@ -567,15 +570,17 @@ class SequenceLabelingModel(object):
                 feed_dict.update(item)
             feed_dict.update({self.dropout_rate_ph: 0., self.rnn_dropout_rate_ph: 0.})
 
-            logits, sequence_actual_length, transition_params = self.sess.run(
-                [self.logits, self.sequence_actual_length, self.transition_params], feed_dict=feed_dict)
+            logits, sequence_actual_length, transition_params, intent = self.sess.run(
+                [self.logits, self.sequence_actual_length, self.transition_params, self.intent], feed_dict=feed_dict)
             for logit, seq_len in zip(logits, sequence_actual_length):
                 logit_actual = logit[:seq_len]
                 viterbi_sequence, _ = tf.contrib.crf.viterbi_decode(
                     logit_actual, transition_params)
                 viterbi_sequences.append(viterbi_sequence)
+            for i in intent:
+                intent_result.append(i)
         print('共标记句子数: %d' % data_count)
-        return viterbi_sequences
+        return viterbi_sequences, intent_result
 
     def compute_loss(self):
         """

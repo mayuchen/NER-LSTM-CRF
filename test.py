@@ -10,7 +10,19 @@ import pickle
 import tensorflow as tf
 from load_data import load_vocs, init_data
 from model import SequenceLabelingModel
-
+INTENT_DIC={
+    'music.play' : 1,
+    'music.pause': 2,
+    'music.prev': 3,
+    'music.next': 4,
+    'navigation.navigation': 5,
+    'navigation.open':6,
+    'navigation.start_navigation':7,
+    'navigation.cancel_navigation':8,
+    'phone_call.make_a_phone_call':9,
+    'phone_call.cancel':10,
+    'OTHERS':0
+}
 
 def main():
     # 加载配置文件
@@ -89,7 +101,7 @@ def main():
     saver.restore(model.sess, config['model_params']['path_model'])
 
     # 标记
-    viterbi_sequences = model.predict(data_dict)
+    viterbi_sequences, intent_result = model.predict(data_dict)
 
     # 写入文件
     label_voc = dict()
@@ -101,6 +113,11 @@ def main():
         config['data_params']['path_result'], 'w', encoding='utf-8')
     for i, sentence in enumerate(sentences):
         for j, item in enumerate(sentence.split('\n')):
+            if j==0:
+                for key in INTENT_DIC.keys():
+                    if intent_result[i] == INTENT_DIC.get(key):
+                        file_result.write('%s\t%s\n' % (item, key))
+                continue
             if j < len(viterbi_sequences[i]):
                 file_result.write('%s\t%s\n' % (item, label_voc[viterbi_sequences[i][j]]))
             else:
