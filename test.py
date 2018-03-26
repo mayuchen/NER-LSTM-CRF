@@ -118,8 +118,8 @@ def main():
                     if intent_result[i] == INTENT_DIC.get(key):
                         file_result.write('%s\t%s\n' % (item, key))
                 continue
-            if j < len(viterbi_sequences[i]):
-                file_result.write('%s\t%s\n' % (item, label_voc[viterbi_sequences[i][j]]))
+            if j - 1 < len(viterbi_sequences[i]):
+                file_result.write('%s\t%s\n' % (item, label_voc[viterbi_sequences[i][j - 1]]))
             else:
                 file_result.write('%s\tO\n' % item)
         file_result.write('\n')
