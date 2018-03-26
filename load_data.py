@@ -22,6 +22,12 @@ INTENT_DIC={
     'phone_call.cancel':10,
     'OTHERS':0
 }
+DOMAIN_DIC={
+    'music':1,
+    'phone_call':2,
+    'navigation':3,
+    'OTHERS':0
+}
 
 def load_vocs(paths):
     """
@@ -88,12 +94,13 @@ def init_data(path, feature_names, vocs, max_len, model='train', intent_path=Non
         char_voc = vocs.pop(0)
     if model == 'train':
         data_dict['label'] = np.zeros((len(sentences), max_len), dtype='int32')
-        # data_dict['intent_label'] = np.zeros((len(sentences)), dtype='int32')
+        data_dict['intent'] = np.zeros((len(sentences)), dtype='int32')
+        data_dict['prev_domain'] = np.zeros((len(sentences)), dtype='int32')
     for index, sentence in enumerate(sentences):
         items = sentence.split('\n')
         one_instance_items = []
         [one_instance_items.append([]) for _ in range(len(feature_names)+1)]
-        for item in items:
+        for item in items[1:]:
             feature_tokens = item.split(sep)
             for j in range(feature_count):
                 one_instance_items[j].append(feature_tokens[j])
@@ -109,6 +116,8 @@ def init_data(path, feature_names, vocs, max_len, model='train', intent_path=Non
                 data_dict['char'][index][i, :] = map_item2id(
                     word, char_voc, word_len)
         if model == 'train':
+            data_dict['intent'][index] = INTENT_DIC.get(items[0].split(sep)[-1].rstrip('\n'), 0)
+            data_dict['prev_domain'][index] = DOMAIN_DIC.get(items[0].split(sep)[1], 0)
             data_dict['label'][index, :] = map_item2id(
                 one_instance_items[-1], vocs[-1], max_len)
         sys.stdout.write('loading data: %d\r' % index)
