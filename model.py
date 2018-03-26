@@ -179,10 +179,35 @@ class SequenceLabelingModel(object):
         # label ph
         self.input_label_ph = tf.placeholder(
             dtype=tf.int32, shape=[None, self._sequence_length], name='input_label_ph')
+        self.input_label_intent = tf.placeholder(
+            dtype=tf.int32, shape=[None], name='input_label_intent'
+        )
         if self._use_char_feature:
             self.cnn_dropout_rate_ph = tf.placeholder(tf.float32, name='cnn_dropout_rate_ph')
 
         self.build_model()
+
+    @ staticmethod
+    def merge_bi_rnn_state(bi_state):
+        encoder_fw_state = bi_state[0][0]
+        encoder_bw_state = bi_state[1][0]
+        if isinstance(encoder_fw_state, rnn.LSTMStateTuple):  # LstmCell
+            state_c = tf.concat(
+                (encoder_fw_state.c, encoder_bw_state.c), 1, name="bidirectional_concat_c")
+            state_h = tf.concat(
+                (encoder_fw_state.h, encoder_bw_state.h), 1, name="bidirectional_concat_h")
+            final_state = rnn.LSTMStateTuple(c=state_c, h=state_h)
+        # elif isinstance(encoder_fw_state, tuple) \
+        #         and isinstance(encoder_fw_state[0], rnn.LSTMStateTuple):  # MultiLstmCell
+        #     final_state = tuple(map(lambda fw_state, bw_state: rnn.LSTMStateTuple(
+        #         c = tf.concat((fw_state.c, bw_state.c), 1, name = "bidirectional_concat_c"),
+        #         h = tf.concat((fw_state.h, bw_state.h), 1, name = "bidirectional_concat_h")),
+        #             encoder_fw_state, encoder_bw_state))
+        else:
+            raise ValueError("RNN state type error")
+            # final_state = tf.concat(
+            #     (encoder_fw_state, encoder_bw_state), 1, name="bidirectional_state_concat")
+        return final_state
 
     def build_model(self):
         for feature_name in self._feature_names:
@@ -268,13 +293,42 @@ class SequenceLabelingModel(object):
         self.sequence_actual_length = get_sequence_actual_length(  # 每个句子的实际长度
             self.input_feature_ph_dict[self._feature_names[0]])
         # todo: add encoder output
-        rnn_outputs, _ = tf.nn.bidirectional_dynamic_rnn(
+        rnn_outputs, rnn_state = tf.nn.bidirectional_dynamic_rnn(
             fw_cell, bw_cell, input_features, scope='bi-lstm',
             dtype=tf.float32, sequence_length=self.sequence_actual_length)
         # shape = [batch_size, max_len, nb_hidden*2]
         lstm_output = tf.nn.dropout(
             tf.concat(rnn_outputs, axis=2, name='lstm_output'),
             keep_prob=1.-self.dropout_rate_ph, name='lstm_output_dropout')
+
+        self.lstm_final_state = self.merge_bi_rnn_state(rnn_state)
+        # lstm_final_state_c = tf.concat((encoder_fw_final_state.c, encoder_bw_final_state.c), axis=1)
+        # lstm_final_state_h = tf.concat((encoder_fw_final_state.h, encoder_bw_final_state.h), axis=1)
+        #
+        # self.encoder_final_state = rnn.LSTMStateTuple(c=lstm_final_state_c, h=lstm_final_state_h)
+        # todo: intent_size
+        #
+        # intent_W = tf.Variable(tf.random_uniform([self._nb_hidden * 2, 11], -0.1, 0.1),
+        #                        dtype=tf.float32, name="intent_W")
+        # intent_b = tf.Variable(tf.zeros([11]), dtype=tf.float32, name="intent_b")
+
+        # 求intent
+        # intent_logits = tf.add(tf.matmul(self.lstm_final_state.h, intent_W), intent_b)
+        intent_logits = tf.layers.dense(self.lstm_final_state.h, 11, activation=tf.nn.tanh)
+        intent_loss = tf.nn.softmax_cross_entropy_with_logits(
+            labels=tf.one_hot(self.input_label_intent, depth=11, dtype=tf.float32),
+            logits=intent_logits)
+        # intent_logits = tf.layers.dense(rnn_state.h, 11)
+        # intent_loss = tf.nn.sparse_softmax_cross_entropy_with_logits(labels=self.input_label_intent,
+        #                                                              logits=intent_logits)
+        self.intent_loss = tf.reduce_mean(intent_loss)
+        self.intent = tf.argmax(intent_logits, axis=1)
+        self.intent_logits = intent_logits
+
+
+        # # decoder
+        # decoder_lengths = self.sequence_actual_length
+        # self.slot_W = tf.Variable(tf.random_uniform([11 * 2, self.slot]))
 
         # softmax
         hidden_size = int(lstm_output.shape[-1])
@@ -289,10 +343,11 @@ class SequenceLabelingModel(object):
         self.loss = self.compute_loss()
         self.l2_loss = self._l2_rate * (tf.nn.l2_loss(self.softmax_w) + tf.nn.l2_loss(self.softmax_b))
 
-        self.total_loss = self.loss + self.l2_loss
-
+        self.total_loss = self.intent_loss + self.loss #+ self.loss #self.loss + self.l2_loss
+        self.loss = self.intent_loss + self.loss
         # train op
         optimizer = tf.train.AdamOptimizer(learning_rate=self._learning_rate)
+        self.train_op = optimizer.minimize(self.total_loss)
         grads_and_vars = optimizer.compute_gradients(self.total_loss)
         nil_grads_and_vars = []
         for g, v in grads_and_vars:
@@ -353,6 +408,7 @@ class SequenceLabelingModel(object):
             # shuffle train data
             data_list = [data_train_dict['label']]
             [data_list.append(data_train_dict[name]) for name in self._feature_names]
+            data_list.append(data_train_dict['intent'])
             shuffle_matrix(*data_list, seed=seed)
 
             # train
@@ -382,19 +438,25 @@ class SequenceLabelingModel(object):
                     {
                         self.dropout_rate_ph: self._dropout_rate,
                         self.rnn_dropout_rate_ph: self._rnn_dropout,
+
                     })
                 # label feed
+                batch_intent = data_train_dict['intent'][batch_indices]
                 batch_label = data_train_dict['label'][batch_indices]
-                feed_dict.update({self.input_label_ph: batch_label})
+                feed_dict.update({
+                    self.input_label_ph: batch_label,
+                    self.input_label_intent: batch_intent
+                })
 
-                _, loss, ls_loss = self.sess.run([self.train_op, self.loss, self.l2_loss], feed_dict=feed_dict)
+                _, loss, intent_loss, intent_pred, intent_logits = self.sess.run([self.train_op, self.total_loss,
+                                                                            self.intent_loss, self.intent, self.intent_logits, ], feed_dict=feed_dict)
                 train_loss += loss
             train_loss /= float(nb_train)
 
             # 计算在开发集上的loss
             dev_loss = self.evaluate(data_dev_dict)
 
-            print('train loss: %f, dev loss: %f, l2 loss: %f' % (train_loss, dev_loss, l2_loss))
+            print('train loss: %f, dev loss: %f, train intent loss: %f, l2 loss: %f' % (train_loss, dev_loss, intent_loss, l2_loss))
 
             # 根据dev上的表现保存模型
             if not self._path_model:
@@ -464,7 +526,9 @@ class SequenceLabelingModel(object):
             feed_dict.update({self.dropout_rate_ph: 0., self.rnn_dropout_rate_ph: 0.})
             # label feed
             batch_label = data_dict['label'][batch_indices]
-            feed_dict.update({self.input_label_ph: batch_label})
+            batch_intent = data_dict['intent'][batch_indices]
+            feed_dict.update({self.input_label_ph: batch_label,
+                              self.input_label_intent: batch_intent})
 
             loss = self.sess.run(self.loss, feed_dict=feed_dict)
             eval_loss += loss
